@@ -1,0 +1,19 @@
+{
+  "model_type": "extreme Gradient Boosting",
+  "accuracy": 0.8018433179723502,
+  "auc_score": 0.8793747876316684,
+  "features": [
+    "Age",
+    "Gender",
+    "Total_Bilirubin",
+    "Direct_Bilirubin",
+    "Alkaline_Phosphotase",
+    "Alamine_Aminotransferase",
+    "Aspartate_Aminotransferase",
+    "Total_Protiens",
+    "Albumin",
+    "Albumin_and_Globulin_Ratio"
+  ],
+  "dataset_size": 722,
+  "training_date": "2025-11-22 12:48:23"
+}

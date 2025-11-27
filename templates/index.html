@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liver Disease Prediction</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .feature-card { transition: transform 0.2s; }
+        .feature-card:hover { transform: translateY(-2px); }
+        .risk-high { background-color: #f8d7da; border-color: #f5c6cb; }
+        .risk-medium { background-color: #fff3cd; border-color: #ffeaa7; }
+        .risk-low { background-color: #d1ecf1; border-color: #bee5eb; }
+        .result-card { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h2 class="mb-0">🩺 Liver Disease Prediction</h2>
+                        <small>Using {{ model_info.model_type }} (Accuracy: {{ "%.1f"|format(model_info.accuracy * 100) }}%)</small>
+                    </div>
+                    <div class="card-body">
+                        <!-- Model Info -->
+                        <div class="alert alert-info">
+                            <strong>Model Information:</strong> {{ model_info.model_type }} |
+                            Trained on {{ model_info.dataset_size }} patients |
+                            AUC Score: {{ "%.1f"|format(model_info.auc_score * 100) }}%
+                        </div>
+
+                        <!-- Prediction Form -->
+                        <form id="predictionForm">
+                            <div class="row">
+                                {% for feature in model_info.features %}
+                                <div class="col-md-6 mb-3">
+                                    <label for="{{ feature }}" class="form-label">
+                                        <strong>{{ feature.replace('_', ' ') }}</strong>
+                                        <small class="text-muted feature-range" data-feature="{{ feature }}"></small>
+                                    </label>
+                                    {% if feature == 'Gender' %}
+                                    <select class="form-select" id="{{ feature }}" name="{{ feature }}" required>
+                                        <option value="">Select Gender</option>
+                                        <option value="1">Male</option>
+                                        <option value="0">Female</option>
+                                    </select>
+                                    {% else %}
+                                    <input type="number" class="form-control" id="{{ feature }}" name="{{ feature }}"
+                                           step="0.1" required>
+                                    {% endif %}
+                                </div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="mt-3">
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    🎯 Predict Liver Disease Risk
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" onclick="fillSampleData()">
+                                    📋 Fill Sample Data
+                                </button>
+                            </div>
+                        </form>
+
+                        <!-- Results -->
+                        <div id="resultCard" class="card mt-4 result-card">
+                            <div class="card-header">
+                                <h4 class="mb-0">Prediction Results</h4>
+                            </div>
+                            <div class="card-body">
+                                <div id="predictionResult"></div>
+                                <div id="probabilityChart" class="mt-3"></div>
+                                <div id="featureAnalysis" class="mt-3"></div>
+                            </div>
+                        </div>
+
+                        <!-- Loading Spinner -->
+                        <div id="loadingSpinner" class="text-center mt-4" style="display: none;">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2">Analyzing patient data...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // Load feature ranges
+        fetch('/feature-ranges')
+            .then(response => response.json())
+            .then(ranges => {
+                Object.keys(ranges).forEach(feature => {
+                    const element = document.querySelector(`[data-feature="${feature}"]`);
+                    if (element && ranges[feature].normal) {
+                        element.textContent = ` (Normal: ${ranges[feature].normal} ${ranges[feature].unit})`;
+                    }
+                });
+            });
+
+        // Form submission
+        document.getElementById('predictionForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            const resultCard = document.getElementById('resultCard');
+
+            submitBtn.disabled = true;
+            loadingSpinner.style.display = 'block';
+            resultCard.style.display = 'none';
+
+            try {
+                const formData = new FormData(this);
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.error) {
+                    throw new Error(result.error);
+                }
+
+                displayResults(result);
+
+            } catch (error) {
+                alert('Prediction failed: ' + error.message);
+            } finally {
+                submitBtn.disabled = false;
+                loadingSpinner.style.display = 'none';
+            }
+        });
+
+        function displayResults(result) {
+            const resultCard = document.getElementById('resultCard');
+            const resultDiv = document.getElementById('predictionResult');
+
+            // Set risk level class
+            resultCard.className = `card mt-4 result-card risk-${result.risk_level}`;
+
+            let riskBadge = '';
+            if (result.risk_level === 'high') {
+                riskBadge = '<span class="badge bg-danger">High Risk</span>';
+            } else if (result.risk_level === 'medium') {
+                riskBadge = '<span class="badge bg-warning">Medium Risk</span>';
+            } else {
+                riskBadge = '<span class="badge bg-success">Low Risk</span>';
+            }
+
+            resultDiv.innerHTML = `
+                <div class="alert ${result.prediction === 'Liver Disease' ? 'alert-danger' : 'alert-success'}">
+                    <h4>${result.prediction} ${riskBadge}</h4>
+                    <p class="mb-0">Confidence: <strong>${result.confidence}</strong></p>
+                </div>
+            `;
+
+            // Display probability chart
+            displayProbabilityChart(result.class_probabilities);
+
+            // Display feature analysis
+            displayFeatureAnalysis(result.input_features);
+
+            resultCard.style.display = 'block';
+        }
+
+        function displayProbabilityChart(probabilities) {
+            const ctx = document.createElement('canvas');
+            document.getElementById('probabilityChart').innerHTML = '<h5>Probability Distribution</h5>';
+            document.getElementById('probabilityChart').appendChild(ctx);
+
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Healthy', 'Liver Disease'],
+                    datasets: [{
+                        data: [probabilities.healthy * 100, probabilities.disease * 100],
+                        backgroundColor: ['#28a745', '#dc3545'],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: ${context.raw.toFixed(1)}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function displayFeatureAnalysis(features) {
+            let analysisHtml = '<h5>Feature Analysis</h5><div class="row">';
+
+            // Highlight abnormal values (simplified)
+            Object.keys(features).forEach(feature => {
+                const value = features[feature];
+                let status = 'normal';
+                let note = '';
+
+                // Simple medical logic for demonstration
+                if (feature === 'Total_Bilirubin' && value > 1.2) {
+                    status = 'abnormal';
+                    note = 'Elevated';
+                } else if (feature === 'Albumin' && value < 3.4) {
+                    status = 'abnormal';
+                    note = 'Low';
+                } else if (feature === 'Alamine_Aminotransferase' && value > 40) {
+                    status = 'abnormal';
+                    note = 'Elevated';
+                }
+
+                analysisHtml += `
+                    <div class="col-md-4 mb-2">
+                        <div class="card feature-card ${status === 'abnormal' ? 'border-warning' : ''}">
+                            <div class="card-body p-2">
+                                <small><strong>${feature.replace('_', ' ')}:</strong> ${value}</small>
+                                ${note ? `<br><small class="text-warning">${note}</small>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            analysisHtml += '</div>';
+            document.getElementById('featureAnalysis').innerHTML = analysisHtml;
+        }
+
+        function fillSampleData() {
+            // Sample data for a potential liver disease case
+            const sampleData = {
+                'Age': 58,
+                'Gender': '1',
+                'Total_Bilirubin': 2.8,
+                'Direct_Bilirubin': 1.3,
+                'Alkaline_Phosphotase': 298,
+                'Alamine_Aminotransferase': 64,
+                'Aspartate_Aminotransferase': 100,
+                'Total_Protiens': 6.2,
+                'Albumin': 3.1,
+                'Albumin_and_Globulin_Ratio': 0.9
+            };
+
+            Object.keys(sampleData).forEach(feature => {
+                const element = document.getElementById(feature);
+                if (element) {
+                    element.value = sampleData[feature];
+                }
+            });
+        }
+    </script>
+</body>
+</html>
