@@ -11,7 +11,11 @@ warnings.filterwarnings('ignore')
 
 app = Flask(__name__)
 
+<<<<<<< HEAD
  
+=======
+# Global variables
+>>>>>>> 8c2ea33a181c74e0a0e3844925dbfa7c1aabfb9c
 model = None
 feature_names = None
 model_info = {
@@ -22,7 +26,11 @@ model_info = {
     "training_date": "2025-11-22 12:48:23"
 }
 
+<<<<<<< HEAD
  
+=======
+# Expected features for liver disease prediction (will be loaded from file)
+>>>>>>> 8c2ea33a181c74e0a0e3844925dbfa7c1aabfb9c
 expected_features = []
 
 
