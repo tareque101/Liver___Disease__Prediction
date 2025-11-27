@@ -2,7 +2,6 @@ from flask import Flask, render_template, request, jsonify
 import pandas as pd
 import numpy as np
 import joblib
-import pymysql
 import os
 import warnings
 import traceback
@@ -12,52 +11,13 @@ warnings.filterwarnings('ignore')
 
 app = Flask(__name__)
 
-# ✅ SIMPLE MYSQL SETUP - REMOVED FLASK-MYSQLDB
-mysql_config = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': '',
-    'database': 'liver_disease_db'
-}
-
-# ✅ SIMPLE MYSQL CONNECTION FUNCTION
-def get_mysql_connection():
-    try:
-        connection = pymysql.connect(
-            host=mysql_config['host'],
-            user=mysql_config['user'],
-            password=mysql_config['password'],
-            database=mysql_config['database'],
-            charset='utf8mb4',
-            cursorclass=pymysql.cursors.DictCursor
-        )
-        return connection
-    except Exception as e:
-        print(f"❌ MySQL connection failed: {e}")
-        return None
-
-# ✅ TEST MYSQL CONNECTION
-def test_mysql_connection():
-    try:
-        connection = get_mysql_connection()
-        if connection:
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
-            connection.close()
-            print("✅ MySQL connection successful!")
-            return True
-        return False
-    except Exception as e:
-        print(f"❌ MySQL connection failed: {e}")
-        return False
-
 # Global variables
 model = None
 feature_names = None
 model_info = {
-    "model_type": "extreme Gradient Boosting",
-    "accuracy": 0.8018433179723502,
-    "auc_score": 0.8793747876316684,
+    "model_type": "Extreme Gradient Boosting",
+    "accuracy": 0.801,
+    "auc_score": 0.879,
     "dataset_size": 722,
     "training_date": "2025-11-22 12:48:23"
 }
@@ -128,9 +88,6 @@ if load_model_and_features():
 else:
     print("⚠️ Using demo model - replace with actual trained model")
 
-# ✅ TEST MYSQL CONNECTION WHEN APP STARTS
-print("🔌 Testing MySQL connection...")
-mysql_working = test_mysql_connection()
 
 @app.route('/')
 def index():
@@ -241,41 +198,6 @@ def predict():
         print(f"📊 Confidence: {confidence:.2f}")
         print(f"🩺 Risk level: {risk_level}")
 
-        # ✅ UPDATED MYSQL DATABASE SAVING - SIMPLE VERSION
-        try:
-            connection = get_mysql_connection()
-            if connection:
-                with connection.cursor() as cursor:
-                    cursor.execute("""
-                        INSERT INTO patient_records 
-                        (age, gender, total_bilirubin, direct_bilirubin, alkaline_phosphotase, 
-                         alamine_aminotransferase, aspartate_aminotransferase, total_protiens, 
-                         albumin, albumin_globulin_ratio, prediction_result, confidence, risk_level)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """, (
-                        input_data.get('Age'),
-                        input_data.get('Gender'),
-                        input_data.get('Total_Bilirubin'),
-                        input_data.get('Direct_Bilirubin'),
-                        input_data.get('Alkaline_Phosphotase'),
-                        input_data.get('Alamine_Aminotransferase'),
-                        input_data.get('Aspartate_Aminotransferase'),
-                        input_data.get('Total_Protiens'),
-                        input_data.get('Albumin'),
-                        input_data.get('Albumin_and_Globulin_Ratio'),
-                        prediction_label,
-                        f"{confidence * 100:.1f}%",
-                        risk_level
-                    ))
-                connection.commit()
-                connection.close()
-                print("✅ Data saved to MySQL database!")
-            else:
-                print("❌ No MySQL connection - skipping database save")
-
-        except Exception as db_error:
-            print(f"❌ Failed to save to database: {db_error}")
-
         result = {
             'prediction': prediction_label,
             'risk_level': risk_level,
@@ -303,8 +225,6 @@ def health():
         'expected_features': len(expected_features),
         'model_type': model_info['model_type'],
         'model_accuracy': model_info['accuracy'],
-        'features_loaded_from_file': feature_names is not None,
-        'mysql_working': mysql_working
     })
 
 
@@ -318,8 +238,6 @@ def model_info_route():
         'expected_feature_count': len(expected_features),
         'dataset_size': model_info['dataset_size'],
         'training_date': model_info['training_date'],
-        'features_loaded_from_file': feature_names is not None,
-        'mysql_working': mysql_working
     }
 
     if hasattr(model, 'n_features_in_'):
@@ -367,14 +285,13 @@ if __name__ == '__main__':
 
     for port in available_ports:
         try:
-            print(f"🚀 Attempting to start Liver Disease Prediction Server on http://localhost:{port}")
+            print(f"🚀 Starting Liver Disease Prediction Server on http://localhost:{port}")
             print(f"📊 Model Type: {model_info['model_type']}")
             print(f"🎯 Accuracy: {model_info['accuracy']:.1%}")
             print(f"📈 AUC Score: {model_info['auc_score']:.1%}")
             print(f"🔢 Expected features: {expected_features}")
             print(f"📋 Number of features: {len(expected_features)}")
             print(f"📁 Features loaded from file: {feature_names is not None}")
-            print(f"🔌 MySQL Working: {mysql_working}")
             print("-" * 60)
 
             app.run(debug=False, host='0.0.0.0', port=port, use_reloader=False)
