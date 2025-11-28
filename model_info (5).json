@@ -1,7 +1,7 @@
 {
-  "model_type": "extreme Gradient Boosting",
-  "accuracy": 0.8018433179723502,
-  "auc_score": 0.8793747876316684,
+  "model_type": "Random Forest Classifier",
+  "accuracy": 0.8189300411522634,
+  "auc_score": 0.9137650724834033,
   "features": [
     "Age",
     "Gender",
@@ -14,6 +14,6 @@
     "Albumin",
     "Albumin_and_Globulin_Ratio"
   ],
-  "dataset_size": 722,
-  "training_date": "2025-11-22 12:48:23"
+  "dataset_size": 808,
+  "training_date": "2025-11-28 13:53:52"
 }
