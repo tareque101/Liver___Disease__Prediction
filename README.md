@@ -1,4 +1,4 @@
-# Health Risk Analyzer 🧠
+# Liver Disease Predictor
 
 A machine learning-powered web application that analyzes health risk factors and provides predictive insights based on medical parameters.
 
