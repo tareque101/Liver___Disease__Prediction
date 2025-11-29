@@ -1,202 +1,154 @@
 from flask import Flask, render_template, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
 import pandas as pd
-import numpy as np
 import joblib
-import os
-import warnings
-import traceback
 from datetime import datetime
-
-warnings.filterwarnings('ignore')
+from sqlalchemy import text
 
 app = Flask(__name__)
 
+# Database
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:@localhost/liver_disease_db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+class PatientRecord(db.Model):
+    __tablename__ = 'patient_records'
+    id = db.Column(db.Integer, primary_key=True)
+    age = db.Column(db.Integer, nullable=False)
+    gender = db.Column(db.String(10), nullable=False)
+    total_bilirubin = db.Column(db.Float, nullable=False)
+    direct_bilirubin = db.Column(db.Float, nullable=False)
+    alkaline_phosphotase = db.Column(db.Float, nullable=False)
+    alamine_aminotransferase = db.Column(db.Float, nullable=False)
+    aspartate_aminotransferase = db.Column(db.Float, nullable=False)
+    total_protiens = db.Column(db.Float, nullable=False)
+    albumin = db.Column(db.Float, nullable=False)
+    albumin_globulin_ratio = db.Column(db.Float, nullable=False)
+    prediction_result = db.Column(db.String(50), nullable=False)
+    confidence = db.Column(db.Float, nullable=False)
+    risk_level = db.Column(db.String(20), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
 # Global variables
 model = None
-feature_names = None
+expected_features = []
 model_info = {
     "model_type": "Extreme Gradient Boosting",
     "accuracy": 0.801,
     "auc_score": 0.879,
-    "dataset_size": 722,
-    "training_date": "2025-11-22 12:48:23"
+    "dataset_size": 722
 }
 
-# Expected features for liver disease prediction (will be loaded from file)
-expected_features = []
-
-
-def load_model_and_features():
-    """Load the liver disease prediction model and feature names"""
-    global model, feature_names, expected_features
-
+def init_database():
     try:
-        # Load feature names first
-        print("Loading feature_names (2).pkl...")
-        feature_names = joblib.load('feature_names (2).pkl')
-        print(f"✅ Feature names loaded: {feature_names}")
+        with app.app_context():
+            db.session.execute(text('SELECT 1'))
+            print("✅ Database connected")
+    except Exception as e:
+        print(f"❌ Database connection failed: {e}")
 
-        # Set expected features
+def save_prediction(patient_data, prediction_result, confidence, risk_level):
+    try:
+        with app.app_context():
+            record = PatientRecord(
+                age=int(patient_data['Age']),
+                gender='Male' if patient_data['Gender'] == 1 else 'Female',
+                total_bilirubin=patient_data['Total_Bilirubin'],
+                direct_bilirubin=patient_data['Direct_Bilirubin'],
+                alkaline_phosphotase=patient_data['Alkaline_Phosphotase'],
+                alamine_aminotransferase=patient_data['Alamine_Aminotransferase'],
+                aspartate_aminotransferase=patient_data['Aspartate_Aminotransferase'],
+                total_protiens=patient_data['Total_Protiens'],
+                albumin=patient_data['Albumin'],
+                albumin_globulin_ratio=patient_data['Albumin_and_Globulin_Ratio'],
+                prediction_result=prediction_result,
+                confidence=float(confidence),
+                risk_level=risk_level
+            )
+            db.session.add(record)
+            db.session.commit()
+            return record.id
+    except Exception as e:
+        print(f"❌ Database save failed: {e}")
+        return None
+
+def load_model():
+    global model, expected_features
+    try:
+        feature_names = joblib.load('feature_names (2).pkl')
         expected_features = feature_names
         model_info["features"] = expected_features
-
-        # Load the main model
-        print("Loading Liver_disease_model.pkl...")
         model = joblib.load('Liver_disease_model.pkl')
-        print(f"✅ Model loaded: {type(model)}")
-
-        # Verify the model expects correct number of features
-        if hasattr(model, 'n_features_in_'):
-            print(f"📊 Model expects {model.n_features_in_} features")
-            expected_count = len(expected_features)
-            if model.n_features_in_ != expected_count:
-                print(f"⚠️ Warning: Model expects {model.n_features_in_} features, but we have {expected_count}")
-
+        print("✅ Model loaded successfully")
         return True
-
     except Exception as e:
-        print(f"❌ Failed to load model or features: {e}")
-        print("💡 Creating demo model for testing...")
-
-        # Use default features if feature file not found
-        if not expected_features:
-            expected_features = [
-                "Age", "Gender", "Total_Bilirubin", "Direct_Bilirubin",
-                "Alkaline_Phosphotase", "Alamine_Aminotransferase",
-                "Aspartate_Aminotransferase", "Total_Protiens",
-                "Albumin", "Albumin_and_Globulin_Ratio"
-            ]
-            model_info["features"] = expected_features
-
-        # Create a simple demo model for testing
+        print(f"❌ Model loading failed: {e}")
+        expected_features = [
+            "Age", "Gender", "Total_Bilirubin", "Direct_Bilirubin",
+            "Alkaline_Phosphotase", "Alamine_Aminotransferase",
+            "Aspartate_Aminotransferase", "Total_Protiens",
+            "Albumin", "Albumin_and_Globulin_Ratio"
+        ]
         from sklearn.ensemble import RandomForestClassifier
         from sklearn.datasets import make_classification
-
-        # Create a dummy model for demo purposes
         X, y = make_classification(n_samples=100, n_features=len(expected_features), random_state=42)
         model = RandomForestClassifier(n_estimators=10, random_state=42)
         model.fit(X, y)
-        print("✅ Demo model created for testing")
+        print("✅ Demo model created")
         return False
 
-
-# Load model and features
-if load_model_and_features():
-    print("🚀 Liver Disease Model loaded successfully!")
-    print(f"📋 Expected features: {expected_features}")
-    print(f"🔢 Number of features: {len(expected_features)}")
-else:
-    print("⚠️ Using demo model - replace with actual trained model")
-
+# Initialize
+print("🚀 Starting Liver Disease Prediction System...")
+init_database()
+load_model()
 
 @app.route('/')
 def index():
-    return render_template('index.html',
-                           model_loaded=model is not None,
-                           feature_count=len(expected_features),
-                           model_info=model_info)
-
+    return render_template('index.html', model_loaded=model is not None, model_info=model_info)
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    if model is None:
+    if not model:
         return jsonify({'error': 'Model not loaded'})
 
     try:
-        print("📥 Received prediction request...")
-
-        # Get form data
         form_data = request.form
-        print(f"📋 Form fields received: {list(form_data.keys())}")
-
-        # Build input data with all expected features
         input_data = {}
-
+        
         for feature in expected_features:
             value = form_data.get(feature, '').strip()
-            if value == '':
-                # Set default values based on medical norms
-                default_values = {
-                    'Age': 45.0,
-                    'Gender': 1.0,  # Male
-                    'Total_Bilirubin': 0.8,
-                    'Direct_Bilirubin': 0.2,
-                    'Alkaline_Phosphotase': 200.0,
-                    'Alamine_Aminotransferase': 25.0,
-                    'Aspartate_Aminotransferase': 30.0,
-                    'Total_Protiens': 6.5,
-                    'Albumin': 3.5,
-                    'Albumin_and_Globulin_Ratio': 1.0
-                }
-                # Use feature name as key (handle different naming conventions)
-                feature_key = feature.replace(' ', '_')  # Handle spaces in feature names
-                input_data[feature] = default_values.get(feature, default_values.get(feature_key, 0.0))
+            if not value:
+                return jsonify({'error': f'Please fill in {feature}'})
+            
+            if feature == 'Gender':
+                if value.lower() in ['male', 'm', '1']:
+                    input_data[feature] = 1
+                elif value.lower() in ['female', 'f', '0']:
+                    input_data[feature] = 0
+                else:
+                    return jsonify({'error': 'Please select Male or Female'})
             else:
                 try:
-                    # Handle gender conversion
-                    if feature.lower() == 'gender':
-                        if value.lower() in ['male', 'm', '1']:
-                            input_data[feature] = 1.0
-                        elif value.lower() in ['female', 'f', '0']:
-                            input_data[feature] = 0.0
-                        else:
-                            input_data[feature] = float(value)
-                    else:
-                        input_data[feature] = float(value)
+                    input_data[feature] = float(value)
                 except ValueError:
-                    input_data[feature] = 0.0
+                    return jsonify({'error': f'Invalid number for {feature}'})
 
-        print(f"🔢 Input data prepared with {len(input_data)} features")
-        print(f"📊 Sample values: { {k: v for k, v in list(input_data.items())[:3]} }")
-
-        # Create DataFrame with exact expected features order
         input_df = pd.DataFrame([input_data])[expected_features]
-
-        print(f"📊 Input DataFrame shape: {input_df.shape}")
-        print(f"✅ Expected shape: (1, {len(expected_features)})")
-
-        # Make prediction
         prediction = model.predict(input_df)[0]
-        print(f"📈 Raw prediction: {prediction}")
-
-        # Get probabilities
+        
         try:
-            probability = model.predict_proba(input_df)[0]
-            confidence = max(probability)
-            print(f"📊 Probabilities: {probability}")
+            probabilities = model.predict_proba(input_df)[0]
+            confidence = max(probabilities)
+            disease_prob = probabilities[1] if len(probabilities) > 1 else probabilities[0]
+        except:
+            confidence = 0.8
+            disease_prob = 0.8 if prediction == 1 else 0.2
 
-            # Determine which probability corresponds to which class
-            if hasattr(model, 'classes_'):
-                classes = model.classes_
-                print(f"🎯 Model classes: {classes}")
-
-                if len(classes) == 2:
-                    if classes[1] == 1 or 'disease' in str(classes[1]).lower():
-                        disease_prob = probability[1]
-                        healthy_prob = probability[0]
-                    else:
-                        disease_prob = probability[0]
-                        healthy_prob = probability[1]
-                else:
-                    disease_prob = probability[1] if len(probability) > 1 else probability[0]
-                    healthy_prob = probability[0]
-            else:
-                disease_prob = probability[1] if len(probability) > 1 else probability[0]
-                healthy_prob = probability[0]
-
-        except Exception as e:
-            print(f"⚠️ Probability error: {e}")
-            confidence = 0.5
-            disease_prob = 0.5 if prediction == 1 else 0.5
-            healthy_prob = 0.5 if prediction == 0 else 0.5
-
-        # Determine result
         prediction_label = 'Liver Disease' if prediction == 1 else 'Healthy'
         risk_level = 'high' if disease_prob > 0.7 else 'medium' if disease_prob > 0.3 else 'low'
 
-        print(f"🎯 Final prediction: {prediction_label}")
-        print(f"📊 Confidence: {confidence:.2f}")
-        print(f"🩺 Risk level: {risk_level}")
+        record_id = save_prediction(input_data, prediction_label, confidence, risk_level)
 
         result = {
             'prediction': prediction_label,
@@ -204,107 +156,55 @@ def predict():
             'confidence': f"{confidence * 100:.1f}%",
             'class_probabilities': {
                 'disease': float(disease_prob),
-                'healthy': float(healthy_prob)
+                'healthy': float(1 - disease_prob)
             },
-            'input_features': input_data
+            'input_features': input_data,
+            'record_id': record_id
         }
 
         return jsonify(result)
 
     except Exception as e:
-        print(f"❌ Prediction error: {e}")
-        traceback.print_exc()
         return jsonify({'error': str(e)})
 
-
-@app.route('/health')
-def health():
-    return jsonify({
-        'status': 'healthy' if model else 'no_model',
-        'model_loaded': model is not None,
-        'expected_features': len(expected_features),
-        'model_type': model_info['model_type'],
-        'model_accuracy': model_info['accuracy'],
-    })
-
-
-@app.route('/model-info')
-def model_info_route():
-    info = {
-        'model_type': model_info['model_type'],
-        'accuracy': model_info['accuracy'],
-        'auc_score': model_info['auc_score'],
-        'expected_features': expected_features,
-        'expected_feature_count': len(expected_features),
-        'dataset_size': model_info['dataset_size'],
-        'training_date': model_info['training_date'],
-    }
-
-    if hasattr(model, 'n_features_in_'):
-        info['n_features_in'] = model.n_features_in_
-    if hasattr(model, 'classes_'):
-        info['classes'] = model.classes_.tolist()
-
-    return jsonify(info)
-
+@app.route('/history')
+def history():
+    try:
+        with app.app_context():
+            records = PatientRecord.query.order_by(PatientRecord.created_at.desc()).limit(10).all()
+            records_list = [{
+                'id': r.id,
+                'age': r.age,
+                'gender': r.gender,
+                'prediction_result': r.prediction_result,
+                'confidence': r.confidence,
+                'risk_level': r.risk_level,
+                'created_at': r.created_at.isoformat() if r.created_at else None
+            } for r in records]
+            return jsonify({'success': True, 'records': records_list})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/feature-ranges')
 def feature_ranges():
-    """Return medical reference ranges for features"""
-    # Common medical reference ranges for liver function tests
     ranges = {
-        'Age': {'min': 1, 'max': 100, 'normal': 'N/A', 'unit': 'years'},
-        'Gender': {'options': ['Male (1)', 'Female (0)'], 'unit': 'category'},
-        'Total_Bilirubin': {'min': 0.1, 'max': 30.0, 'normal': '0.1-1.2', 'unit': 'mg/dL'},
-        'Direct_Bilirubin': {'min': 0.1, 'max': 15.0, 'normal': '0.1-0.3', 'unit': 'mg/dL'},
-        'Alkaline_Phosphotase': {'min': 50, 'max': 1500, 'normal': '44-147', 'unit': 'U/L'},
-        'Alamine_Aminotransferase': {'min': 5, 'max': 500, 'normal': '7-56', 'unit': 'U/L'},
-        'Aspartate_Aminotransferase': {'min': 5, 'max': 500, 'normal': '5-40', 'unit': 'U/L'},
-        'Total_Protiens': {'min': 3.0, 'max': 9.0, 'normal': '6.0-8.3', 'unit': 'g/dL'},
-        'Albumin': {'min': 1.0, 'max': 5.0, 'normal': '3.4-5.4', 'unit': 'g/dL'},
-        'Albumin_and_Globulin_Ratio': {'min': 0.1, 'max': 3.0, 'normal': '1.0-2.0', 'unit': 'ratio'}
+        'Age': {'normal': 'N/A', 'unit': 'years'},
+        'Total_Bilirubin': {'normal': '0.1-1.2', 'unit': 'mg/dL'},
+        'Direct_Bilirubin': {'normal': '0.1-0.3', 'unit': 'mg/dL'},
+        'Alkaline_Phosphotase': {'normal': '44-147', 'unit': 'U/L'},
+        'Alamine_Aminotransferase': {'normal': '7-56', 'unit': 'U/L'},
+        'Aspartate_Aminotransferase': {'normal': '5-40', 'unit': 'U/L'},
+        'Total_Protiens': {'normal': '6.0-8.3', 'unit': 'g/dL'},
+        'Albumin': {'normal': '3.4-5.4', 'unit': 'g/dL'},
+        'Albumin_and_Globulin_Ratio': {'normal': '1.0-2.0', 'unit': 'ratio'}
     }
-
-    # Create a dynamic ranges dictionary based on actual features
-    dynamic_ranges = {}
-    for feature in expected_features:
-        # Try to find matching range, use generic if not found
-        feature_key = feature.replace(' ', '_')  # Handle spaces
-        if feature_key in ranges:
-            dynamic_ranges[feature] = ranges[feature_key]
-        else:
-            # Create generic range for unknown features
-            dynamic_ranges[feature] = {'min': 0, 'max': 100, 'normal': 'N/A', 'unit': 'units'}
-
-    return jsonify(dynamic_ranges)
-
+    return jsonify(ranges)
 
 if __name__ == '__main__':
-    # Try different ports - 5000 is blocked by Windows system process
-    available_ports = [5001, 5002, 5003, 8080, 8000, 3000, 5050, 5055]
-
-    for port in available_ports:
+    for port in [5001, 5002, 5003, 8080]:
         try:
-            print(f"🚀 Starting Liver Disease Prediction Server on http://localhost:{port}")
-            print(f"📊 Model Type: {model_info['model_type']}")
-            print(f"🎯 Accuracy: {model_info['accuracy']:.1%}")
-            print(f"📈 AUC Score: {model_info['auc_score']:.1%}")
-            print(f"🔢 Expected features: {expected_features}")
-            print(f"📋 Number of features: {len(expected_features)}")
-            print(f"📁 Features loaded from file: {feature_names is not None}")
-            print("-" * 60)
-
-            app.run(debug=False, host='0.0.0.0', port=port, use_reloader=False)
+            print(f"🚀 Server starting on http://localhost:{port}")
+            app.run(debug=True, host='127.0.0.1', port=port, use_reloader=False)
             break
-
-        except OSError as e:
-            if "attempt was made to access a socket in a way forbidden" in str(e) or "Address already in use" in str(e):
-                print(f"❌ Port {port} is not available, trying next port...")
-                continue
-            else:
-                print(f"❌ Unexpected error on port {port}: {e}")
-                raise e
-    else:
-        print("❌ All common ports are occupied. Please free up a port and try again.")
-        print("💡 You can also try running on a specific port like 5050:")
-        print("   Change the code to: app.run(port=5050)")
+        except OSError:
+            print(f"❌ Port {port} not available")

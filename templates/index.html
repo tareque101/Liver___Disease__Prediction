@@ -100,7 +100,7 @@
                             <i class="fas fa-heartbeat fa-2x me-3"></i>
                             <div>
                                 <h2 class="mb-1">Liver Disease Prediction</h2>
-                                <div class="sub-headline">Advanced AI-powered liver health assessment</div>
+                        
                             </div>
                         </div>
                     </div>
@@ -300,14 +300,14 @@
         function displayFeatureAnalysis(features) {
             let analysisHtml = '<h5 class="mb-3"><i class="fas fa-chart-bar me-2"></i>Biomarker Analysis</h5><div class="row">';
 
-            // Highlight abnormal values
+       
             Object.keys(features).forEach(feature => {
                 const value = features[feature];
                 let status = 'normal';
                 let note = '';
                 let icon = 'check';
 
-                // Simple medical logic for demonstration
+              
                 if (feature === 'Total_Bilirubin' && value > 1.2) {
                     status = 'abnormal';
                     note = 'Elevated';
@@ -345,7 +345,7 @@
         }
 
         function fillSampleData() {
-            // Sample data for a potential liver disease case
+            
             const sampleData = {
                 'Age': 58,
                 'Gender': '1',
