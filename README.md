@@ -2,7 +2,7 @@
 
 A machine learning-powered web application that analyzes health risk factors and provides predictive insights based on medical parameters.
 
-## 🚀 Features
+##  Features
 
 - **Real-time Health Analysis**: Input medical parameters to get instant health risk predictions
 - **Interactive Form**: User-friendly interface with form validation
@@ -13,15 +13,14 @@ A machine learning-powered web application that analyzes health risk factors and
   - Various health metrics with numerical inputs
   - Range validation for all parameters
 
-## 🛠️ Technologies Used
+##  Technologies Used
 
 - **Frontend**: HTML5, CSS3, JavaScript
-- **Styling**: Bootstrap 5 with custom styling
 - **Icons**: Font Awesome
 - **Backend**: Flask (Python)
 - **Machine Learning**: Scikit-learn model integration
 
-## 📋 Usage
+##  Usage
 
 1. **Fill the Form**: Enter your health parameters in the input fields
 2. **Gender Selection**: Choose between Male (1) or Female (0)
@@ -29,7 +28,7 @@ A machine learning-powered web application that analyzes health risk factors and
 4. **Get Analysis**: Click "Analyze Health Risk" for instant predictions
 5. **Sample Testing**: Use "Sample Data" to test with example values
 
-## 🎯 Parameters Analyzed
+##  Parameters Analyzed
 
 The application analyzes multiple health features including (but not limited to):
 - Gender
@@ -37,7 +36,7 @@ The application analyzes multiple health features including (but not limited to)
 - Clinical test results
 - Lifestyle factors
 
-## 🔧 Installation
+##  Installation
 
 ```bash
 # Clone the repository
